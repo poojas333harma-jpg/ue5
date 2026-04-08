@@ -155,45 +155,41 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
         // ★★★ AAA STATIC & DYNAMIC SNAP — Anchor character to wall, prevent drift ★★★
         UPrimitiveComponent* RootPrim = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
-        if (RootPrim)
+        if (RootPrim && !bIsPerformingAction)
         {
+            // ONLY zero velocity if we are completely idle on the ledge.
+            // If performing an action (Climbing/Shimmy), the animation Root Motion 
+            // needs to move the character. Forcing zero causes violently shaking ("Fadfadana").
             RootPrim->SetPhysicsLinearVelocity(FVector::ZeroVector);
             RootPrim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-
-            // Mover 2.0 native stabilization: achieved via GravityOverride 
-            // and manual physics zeroing (RootPrim) during the hang state.
-            if (Mover)
-            {
-                // Note: Simulation stabilization is handled by disabling gravity and snapping location.
-            }
+            if (Mover) Mover->SetVelocity(FVector::ZeroVector);
 
             // ── AAA DYNAMIC HANG LOCK ──
             // IDLE HANG: "Paththar-lock" (Strict Anchor) — character stays 100% still
-            // PERFORMING ACTION: "Langar Update" — allow lateral movement during shimmy
-            
-            // Soft-lock instead of hard-set every frame to prevent fighting with Mover physics tick
             float DriftDist = FVector::Dist(Owner->GetActorLocation(), CurrentHangTargetLocation);
-            if (!bIsPerformingAction && DriftDist > 5.0f) // Increased drift threshold slightly to prevent micro-fighting
+            if (DriftDist > 5.0f) // Increased drift threshold slightly to prevent micro-fighting
             {
                 Owner->SetActorLocation(CurrentHangTargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
                 Owner->SetActorRotation(CurrentHangTargetRotation);
             }
-            else if (bIsPerformingAction)
-            {
-                // DYNAMIC LOCK: Allow lateral movement (A/D) but lock depth/height
-                FVector CurrentLoc = Owner->GetActorLocation();
-                FVector WallRight = FVector::CrossProduct(FVector::UpVector, CurrentHangWallNormal).GetSafeNormal();
-                
-                // Project current movement onto the wall surface
-                FVector ToCurrent = CurrentLoc - CurrentHangTargetLocation;
-                float LateralOffset = FVector::DotProduct(ToCurrent, WallRight);
-
-                // Safe Position = Anchor + Lateral Movement
-                FVector SafeLoc = CurrentHangTargetLocation + (WallRight * LateralOffset);
-                Owner->SetActorLocation(SafeLoc, false, nullptr, ETeleportType::TeleportPhysics);
-                Owner->SetActorRotation(CurrentHangTargetRotation);
-            }
         }
+        else if (RootPrim && bIsPerformingAction && !bIsClimbingUp)
+        {
+            // DYNAMIC LOCK (SHIMMY ONLY): Allow lateral movement (A/D) but lock depth/height
+            // We DO NOT force zero velocity here, so animation root motion can do its job.
+            FVector CurrentLoc = Owner->GetActorLocation();
+            FVector WallRight = FVector::CrossProduct(FVector::UpVector, CurrentHangWallNormal).GetSafeNormal();
+            
+            // Project current movement onto the wall surface
+            FVector ToCurrent = CurrentLoc - CurrentHangTargetLocation;
+            float LateralOffset = FVector::DotProduct(ToCurrent, WallRight);
+
+            // Safe Position = Anchor + Lateral Movement
+            FVector SafeLoc = CurrentHangTargetLocation + (WallRight * LateralOffset);
+            Owner->SetActorLocation(SafeLoc, false, nullptr, ETeleportType::TeleportPhysics);
+            Owner->SetActorRotation(CurrentHangTargetRotation);
+        }
+        // IF bIsClimbingUp is TRUE, we let the character move completely freely upward!
 
         // ═══ DIRECT KEYBOARD INPUT — RISING EDGE + INPUT CONSUMPTION ═══
         APawn* HangPawn = Cast<APawn>(Owner);
@@ -218,13 +214,14 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
                 }
             }
 
-            // Fallback: raw IsInputKeyDown
-            if (!bW) bW = PC->IsInputKeyDown(EKeys::W);
-            if (!bA) bA = PC->IsInputKeyDown(EKeys::A);
-            if (!bD) bD = PC->IsInputKeyDown(EKeys::D);
+            // Fallback: raw IsInputKeyDown + Enhanced Input compatibility for W/A/S/D mapping
+            // (Assumes standard enhanced input vectors are mapping to these keys if they are down)
+            if (!bW) bW = PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Gamepad_LeftY);
+            if (!bA) bA = PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Gamepad_LeftX);
+            if (!bD) bD = PC->IsInputKeyDown(EKeys::D); // Gamepad X handled in A via axis mostly
             if (!bS) bS = PC->IsInputKeyDown(EKeys::S);
-            if (!bC) bC = PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::LeftControl);
-            if (!bSpace) bSpace = PC->IsInputKeyDown(EKeys::SpaceBar);
+            if (!bC) bC = PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Right);
+            if (!bSpace) bSpace = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 
             // DEBUG INPUT ON SCREEN
             if (bShowDebugTraces && GEngine)
@@ -242,14 +239,40 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
             if (!bIsPerformingAction && HangElapsedTime > 0.4f)
             {
-                // SPACE or W = Climb Up
-                if ((bSpace && !bWasSpaceDown) || (bW && !bWasWDown && !bWasInJumpW))
+                // Directional + Jump logic
+                if (bSpace && !bWasSpaceDown)
                 {
-                    if (TryClimbUp()) 
+                    if (bA)
                     {
-                        bWasSpaceDown = bSpace;
-                        bWasWDown = bW;
+                        // Play Jump Left from hang
+                        if (TryPlayLedgeInteraction(FLedgeTraceInputs(), TraversalDataAsset, 0.f, -1.f, true, true, CurrentHangType))
+                            bIsPerformingAction = true;
                     }
+                    else if (bD)
+                    {
+                        // Play Jump Right from hang
+                        if (TryPlayLedgeInteraction(FLedgeTraceInputs(), TraversalDataAsset, 0.f, 1.f, true, true, CurrentHangType))
+                            bIsPerformingAction = true;
+                    }
+                    else if (bS)
+                    {
+                        // S + Jump = Drop down (or jump backwards if implemented)
+                        if (TryPlayLedgeInteraction(FLedgeTraceInputs(), TraversalDataAsset, -1.f, 0.f, true, true, CurrentHangType))
+                            bIsPerformingAction = true;
+                        else
+                            ReleaseHang(); 
+                    }
+                    else
+                    {
+                        // W/None + Space = Climb Up
+                        if (TryClimbUp()) bWasSpaceDown = bSpace;
+                    }
+                    bWasSpaceDown = bSpace;
+                }
+                // Just W = Climb Up
+                else if (bW && !bWasWDown && !bWasInJumpW)
+                {
+                    if (TryClimbUp()) bWasWDown = bW;
                 }
                 // A/D = Shimmy
                 else if (bA && !bWasADown)
