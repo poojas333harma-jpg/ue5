@@ -162,7 +162,6 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
             // needs to move the character. Forcing zero causes violently shaking ("Fadfadana").
             RootPrim->SetPhysicsLinearVelocity(FVector::ZeroVector);
             RootPrim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-            if (Mover) Mover->SetVelocity(FVector::ZeroVector);
 
             // ── AAA DYNAMIC HANG LOCK ──
             // IDLE HANG: "Paththar-lock" (Strict Anchor) — character stays 100% still
