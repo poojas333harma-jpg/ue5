@@ -195,7 +195,7 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
         if (PC)
         {
             // SUPREME INPUT CHECK: Poll directly from Viewport Client to bypass "Enhanced Input" consumption
-            bool bW = false, bA = false, bD = false, bS = false, bSpace = false;
+            bool bW = false, bA = false, bD = false, bS = false, bC = false, bSpace = false;
             ULocalPlayer* LP = PC->GetLocalPlayer();
             if (LP && LP->ViewportClient)
             {
@@ -206,6 +206,7 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
                     bA = VP->KeyState(EKeys::A);
                     bD = VP->KeyState(EKeys::D);
                     bS = VP->KeyState(EKeys::S);
+                    bC = VP->KeyState(EKeys::C) || VP->KeyState(EKeys::LeftControl);
                     bSpace = VP->KeyState(EKeys::SpaceBar);
                 }
             }
@@ -215,6 +216,7 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
             if (!bA) bA = PC->IsInputKeyDown(EKeys::A);
             if (!bD) bD = PC->IsInputKeyDown(EKeys::D);
             if (!bS) bS = PC->IsInputKeyDown(EKeys::S);
+            if (!bC) bC = PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::LeftControl);
             if (!bSpace) bSpace = PC->IsInputKeyDown(EKeys::SpaceBar);
 
             // DEBUG INPUT ON SCREEN
@@ -224,6 +226,7 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
                 if (bA) GEngine->AddOnScreenDebugMessage(902, 0.1f, FColor::Orange, TEXT("SUPREME INPUT: A"));
                 if (bD) GEngine->AddOnScreenDebugMessage(903, 0.1f, FColor::Orange, TEXT("SUPREME INPUT: D"));
                 if (bS) GEngine->AddOnScreenDebugMessage(904, 0.1f, FColor::Orange, TEXT("SUPREME INPUT: S"));
+                if (bC) GEngine->AddOnScreenDebugMessage(906, 0.1f, FColor::Orange, TEXT("SUPREME INPUT: C/CTRL"));
                 if (bSpace) GEngine->AddOnScreenDebugMessage(905, 0.1f, FColor::Orange, TEXT("SUPREME INPUT: SPACE"));
             }
 
@@ -232,10 +235,14 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
             if (!bIsPerformingAction && HangElapsedTime > 0.4f)
             {
-                // SPACE = Climb Up
-                if (bSpace && !bWasSpaceDown)
+                // SPACE or W = Climb Up
+                if ((bSpace && !bWasSpaceDown) || (bW && !bWasWDown && !bWasInJumpW))
                 {
-                    if (TryClimbUp()) bWasSpaceDown = bSpace;
+                    if (TryClimbUp()) 
+                    {
+                        bWasSpaceDown = bSpace;
+                        bWasWDown = bW;
+                    }
                 }
                 // A/D = Shimmy
                 else if (bA && !bWasADown)
@@ -246,11 +253,12 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
                 {
                     if (TryShimmy(1.f)) bWasDDown = bD;
                 }
-                // S = Release
-                else if (bS && !bWasSDown)
+                
+                // C / LCTRL = Release Hang
+                if (bC && !bWasCDown)
                 {
                     ReleaseHang();
-                    bWasSDown = bS;
+                    bWasCDown = bC;
                 }
             }
 
@@ -259,6 +267,7 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
             bWasADown = bA;
             bWasDDown = bD;
             bWasSDown = bS;
+            bWasCDown = bC;
             bWasSpaceDown = bSpace;
         }
 
@@ -468,6 +477,7 @@ void ULedgeDetectorComponent::InternalReleaseHang()
     bWasADown = false;
     bWasDDown = false;
     bWasSDown = false;
+    bWasCDown = false;
     HangElapsedTime = 0.f;
 
     // ★ Cooldown reset — release ke baad 1.5s tak re-grab block rahega
