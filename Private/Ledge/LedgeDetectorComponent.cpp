@@ -160,13 +160,21 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
             RootPrim->SetPhysicsLinearVelocity(FVector::ZeroVector);
             RootPrim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
+            // Mover 2.0 native stabilization: explicitly tell the simulation the velocity is zero every frame.
+            if (Mover)
+            {
+                // If Mover is active, forcing actor location externally causes "Simulation start location disagrees" errors.
+                // We use Mover's native intent instead to stop movement.
+                Mover->SetVelocity(FVector::ZeroVector);
+            }
+
             // ── AAA DYNAMIC HANG LOCK ──
             // IDLE HANG: "Paththar-lock" (Strict Anchor) — character stays 100% still
             // PERFORMING ACTION: "Langar Update" — allow lateral movement during shimmy
             
             // Soft-lock instead of hard-set every frame to prevent fighting with Mover physics tick
             float DriftDist = FVector::Dist(Owner->GetActorLocation(), CurrentHangTargetLocation);
-            if (!bIsPerformingAction && DriftDist > 2.0f)
+            if (!bIsPerformingAction && DriftDist > 5.0f) // Increased drift threshold slightly to prevent micro-fighting
             {
                 Owner->SetActorLocation(CurrentHangTargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
                 Owner->SetActorRotation(CurrentHangTargetRotation);
@@ -420,11 +428,10 @@ bool ULedgeDetectorComponent::TryGrabLedge(FLedgeTraceInputs Inputs)
     Owner->SetActorLocation(CurrentHangTargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
     Owner->SetActorRotation(CurrentHangTargetRotation);
 
-    // MOVER HARD-LOCK: Use QueueNextMode to stabilize as requested and use zero gravity
+    // MOVER HARD-LOCK: Disable gravity to stop Falling mode from applying downward acceleration
     UMoverComponent* Mover = Owner->FindComponentByClass<UMoverComponent>();
     if (Mover)
     {
-        Mover->QueueNextMode(FName("Flying"));
         Mover->SetGravityOverride(true, FVector::ZeroVector);
     }
 
@@ -510,7 +517,7 @@ void ULedgeDetectorComponent::InternalReleaseHang()
         // 🚩 AAA SYNC: Reset Mover's internal state to the current physics position
         // This stops the 'location disagrees' bounce.
         Mover->SetGravityOverride(false);
-        Mover->QueueNextMode(FName("Falling"));
+        // We removed QueueNextMode because "Falling" is handled automatically by gravity.
     }
 
     // CAMERA FIX: Restore SpringArm settings
