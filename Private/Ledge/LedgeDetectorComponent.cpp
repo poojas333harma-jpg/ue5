@@ -160,12 +160,11 @@ void ULedgeDetectorComponent::TickComponent(float DeltaTime, ELevelTick TickType
             RootPrim->SetPhysicsLinearVelocity(FVector::ZeroVector);
             RootPrim->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
-            // Mover 2.0 native stabilization: explicitly tell the simulation the velocity is zero every frame.
+            // Mover 2.0 native stabilization: achieved via GravityOverride 
+            // and manual physics zeroing (RootPrim) during the hang state.
             if (Mover)
             {
-                // If Mover is active, forcing actor location externally causes "Simulation start location disagrees" errors.
-                // We use Mover's native intent instead to stop movement.
-                Mover->SetVelocity(FVector::ZeroVector);
+                // Note: Simulation stabilization is handled by disabling gravity and snapping location.
             }
 
             // ── AAA DYNAMIC HANG LOCK ──
@@ -1044,6 +1043,7 @@ bool ULedgeDetectorComponent::TryShimmy(float Direction)
     // ── STEP 1B: Check for Inner Corner (blocking wall in front of shimmy) ──
     FVector InnerCheckOrigin = Owner->GetActorLocation() + (-CurrentHangWallNormal * 15.f);
     FVector InnerCheckEnd = InnerCheckOrigin + (MoveDir * 45.f);
+    FHitResult InnerHit;
     if (GetWorld()->LineTraceSingleByChannel(InnerHit, InnerCheckOrigin, InnerCheckEnd, ECC_WorldStatic, WallParams))
     {
         // 🚩 INNER CORNER: Blocking wall hit!
@@ -1332,4 +1332,5 @@ void ULedgeDetectorComponent::OnActionMontageEnded(UAnimMontage* Montage, bool b
 // ═══════════════════════════════════════════════════════════════════
 bool ULedgeDetectorComponent::CheckForCorner(bool bCheckLeft, FVector& OutCornerLocation, FRotator& OutCornerRotation) { return false; }
 bool ULedgeDetectorComponent::TraceBackClearance(const FVector& LedgeTopLocation, const FVector& Forward, float CapsuleHalfHeight, float Radius, FVector& OutBackFloor, FVector& OutBackLedge) const { return false; }
+void ULedgeDetectorComponent::SetOverlayState(EHeroOverlayState NewState) {}
 
