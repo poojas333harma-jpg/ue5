@@ -1325,5 +1325,4 @@ void ULedgeDetectorComponent::OnActionMontageEnded(UAnimMontage* Montage, bool b
 // ═══════════════════════════════════════════════════════════════════
 bool ULedgeDetectorComponent::CheckForCorner(bool bCheckLeft, FVector& OutCornerLocation, FRotator& OutCornerRotation) { return false; }
 bool ULedgeDetectorComponent::TraceBackClearance(const FVector& LedgeTopLocation, const FVector& Forward, float CapsuleHalfHeight, float Radius, FVector& OutBackFloor, FVector& OutBackLedge) const { return false; }
-void ULedgeDetectorComponent::SetOverlayState(EHeroLedgeTraversalState NewState) {}
 

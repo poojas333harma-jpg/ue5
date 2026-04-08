@@ -141,7 +141,7 @@ public:
     bool JumpEject();
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ledge|Detection")
-    float MaxHangTime = 0.f;
+    float MaxHangTime = 8.f;
 
     /** Yaw offset to fix character facing direction (e.g. set to -90 or 180 if character faces sideways/away) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ledge|Detection")
