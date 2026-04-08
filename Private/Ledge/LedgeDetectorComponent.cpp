@@ -1037,7 +1037,6 @@ bool ULedgeDetectorComponent::TryShimmy(float Direction)
     // ── STEP 1B: Check for Inner Corner (blocking wall in front of shimmy) ──
     FVector InnerCheckOrigin = Owner->GetActorLocation() + (-CurrentHangWallNormal * 15.f);
     FVector InnerCheckEnd = InnerCheckOrigin + (MoveDir * 45.f);
-    FHitResult InnerHit;
     if (GetWorld()->LineTraceSingleByChannel(InnerHit, InnerCheckOrigin, InnerCheckEnd, ECC_WorldStatic, WallParams))
     {
         // 🚩 INNER CORNER: Blocking wall hit!
@@ -1048,6 +1047,23 @@ bool ULedgeDetectorComponent::TryShimmy(float Direction)
         CurrentHangTargetRotation = (-CurrentHangWallNormal).Rotation();
         CurrentHangTargetRotation.Pitch = 0.f;
         CurrentHangTargetRotation.Roll = 0.f;
+
+        // 🚩 AAA SYNC: Trace the new ledge top!
+        FHitResult NewLedgeHit;
+        FVector NewForward = -CurrentHangWallNormal;
+        if (TraceWallTop(InnerHit.ImpactPoint, NewForward, MaxGrabHeight, NewLedgeHit))
+        {
+            UCapsuleComponent* Cap = Owner->FindComponentByClass<UCapsuleComponent>();
+            float CapsuleHH = Cap ? Cap->GetScaledCapsuleHalfHeight() : 90.f;
+            float ZOffset = -(CapsuleHH * 0.6f);
+            
+            CurrentHangLedgeTop = NewLedgeHit.ImpactPoint;
+            float WallOffset = (Cap ? Cap->GetScaledCapsuleRadius() : 35.f) + 15.f;
+            CurrentHangTargetLocation = CurrentHangLedgeTop + (CurrentHangWallNormal * WallOffset) + (FVector::UpVector * ZOffset);
+            
+            Owner->SetActorLocation(CurrentHangTargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
+            Owner->SetActorRotation(CurrentHangTargetRotation);
+        }
         
         // Play Turn90 (Internal)
         UAnimMontage* InnerTurn = bGoingRight ? TraversalDataAsset->TurnLeft90_Hang_Montage : TraversalDataAsset->TurnRight90_Hang_Montage;
@@ -1309,5 +1325,5 @@ void ULedgeDetectorComponent::OnActionMontageEnded(UAnimMontage* Montage, bool b
 // ═══════════════════════════════════════════════════════════════════
 bool ULedgeDetectorComponent::CheckForCorner(bool bCheckLeft, FVector& OutCornerLocation, FRotator& OutCornerRotation) { return false; }
 bool ULedgeDetectorComponent::TraceBackClearance(const FVector& LedgeTopLocation, const FVector& Forward, float CapsuleHalfHeight, float Radius, FVector& OutBackFloor, FVector& OutBackLedge) const { return false; }
-void ULedgeDetectorComponent::SetOverlayState(EHeroOverlayState NewState) {}
+void ULedgeDetectorComponent::SetOverlayState(EHeroLedgeTraversalState NewState) {}
 
