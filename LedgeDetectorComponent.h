@@ -218,6 +218,7 @@ public:
     class UHeroOverlayData* CurrentOverlay;
 
     UFUNCTION(BlueprintCallable, Category = "Hero|Overlay")
+    void SetOverlayState(EHeroOverlayState NewState);
 
     UFUNCTION(BlueprintCallable, Category = "Ledge")
     bool TryDetectLedge(const FLedgeTraceInputs& Inputs, FLedgeCheckResult& OutResult);
